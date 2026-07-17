@@ -4,18 +4,27 @@ Per-user isolation: each user gets their own Chroma collection
 (collection name = "user_<user_id>"). A query can never read another
 user's chunks because it only ever touches that user's collection —
 the same multi-tenant isolation model as the Django RAG app.
+
+NOTE: chromadb is imported lazily inside get_client() because importing
+it pulls in onnxruntime (~seconds of startup cost), which delayed port
+binding on Render.
 """
 
-import chromadb
-from chromadb.api import ClientAPI
-from chromadb.api.models.Collection import Collection
+from functools import lru_cache
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from chromadb.api import ClientAPI
+    from chromadb.api.models.Collection import Collection
 
 
-def create_client(persist_dir: str) -> ClientAPI:
+@lru_cache(maxsize=1)
+def get_client(persist_dir: str) -> "ClientAPI":
+    import chromadb  # imports onnxruntime — runtime-deferred
     return chromadb.PersistentClient(path=persist_dir)
 
 
-def get_user_collection(client: ClientAPI, user_id: str) -> Collection:
+def get_user_collection(client: "ClientAPI", user_id: str) -> "Collection":
     return client.get_or_create_collection(
         name=f"user_{user_id}",
         metadata={"hnsw:space": "cosine"},
@@ -23,7 +32,7 @@ def get_user_collection(client: ClientAPI, user_id: str) -> Collection:
 
 
 def upsert_chunks(
-    collection: Collection,
+    collection: "Collection",
     document_id: str,
     chunks: list[str],
     embeddings: list[list[float]],
@@ -40,7 +49,7 @@ def upsert_chunks(
 
 
 def query_chunks(
-    collection: Collection,
+    collection: "Collection",
     query_embedding: list[float],
     top_k: int,
     document_ids: list[str] | None = None,
@@ -72,5 +81,5 @@ def query_chunks(
     return hits
 
 
-def delete_document(collection: Collection, document_id: str) -> None:
+def delete_document(collection: "Collection", document_id: str) -> None:
     collection.delete(where={"document_id": document_id})

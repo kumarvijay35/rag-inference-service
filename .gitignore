@@ -4,3 +4,5 @@ __pycache__/
 .env
 chroma_data/
 .pytest_cache/
+
+venv/

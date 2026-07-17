@@ -16,11 +16,15 @@ async def query_documents(
     state=Depends(get_state),
     settings: Settings = Depends(get_settings),
 ) -> QueryResponse:
+    # Lazily-loaded singletons (lru_cache); Groq client still lives in app.state
+    model = embeddings.get_model(settings.embedding_model_name)
+    client = vectorstore.get_client(settings.chroma_dir)
+
     # 1. Embed the question (CPU-bound -> threadpool)
-    [query_vector] = await embeddings.embed_texts(state.embedding_model, [payload.question])
+    [query_vector] = await embeddings.embed_texts(model, [payload.question])
 
     # 2. Retrieve top-k chunks from the user's isolated collection
-    collection = vectorstore.get_user_collection(state.chroma_client, payload.user_id)
+    collection = vectorstore.get_user_collection(client, payload.user_id)
     hits = vectorstore.query_chunks(
         collection, query_vector, payload.top_k, payload.document_ids
     )

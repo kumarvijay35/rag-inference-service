@@ -17,6 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app.services import embeddings
 from app.services.chunking import chunk_text
 
 HEADERS = {"X-Internal-Api-Key": "test-key"}
@@ -35,7 +36,10 @@ def client(monkeypatch):
     async def fake_generate_answer(*args, **kwargs):
         return "This is a grounded test answer."
 
-    monkeypatch.setattr(main.embeddings, "load_model", lambda name: FakeEmbeddingModel())
+    # Routers (and main's warm thread) look up get_model on the embeddings
+    # module at call time, so patching the module attribute replaces it
+    # everywhere — and bypasses lru_cache, since the real function never runs.
+    monkeypatch.setattr(embeddings, "get_model", lambda name: FakeEmbeddingModel())
     monkeypatch.setattr("app.routers.query.llm.generate_answer", fake_generate_answer)
 
     with TestClient(main.app) as c:
